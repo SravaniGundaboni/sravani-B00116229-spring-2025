@@ -5,54 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fraud Detection Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #ebd6d6;
-        }
-        h1 {
-            color: #141313;
-            text-align: center;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-            background-color: #f8fafc;
-            box-shadow: 0 0 10px rgba(253, 250, 250, 0.1);
-        }
-        table, th, td {
-            border: 1px solid #ddd;
-        }
-        th, td {
-            padding: 12px;
-            text-align: left;
-        }
-        th {
-            background-color: #f4f4f4;
-            font-weight: bold;
-        }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        tr:hover {
-            background-color: #f1f1f1;
-        }
-        canvas {
-            max-width: 1000px;
-            margin: 20px 0;
-            background-color: #f8f8fa;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
+    <!-- Flash Message -->
+    <div class="flash-message" id="flashMessage"></div>
+
+    <!-- Login Form -->
+    <div class="auth-container" id="loginForm">
+        <h2>Login</h2>
+        <input type="email" id="loginEmail" placeholder="Email" required>
+        <input type="password" id="loginPassword" placeholder="Password" required>
+        <button onclick="login()">Login</button>
+        <div class="switch-auth">
+            Don't have an account? <a onclick="showRegister()">Register</a>
+        </div>
+    </div>
+
+    <!-- Registration Form -->
+    <div class="auth-container" id="registerForm" style="display: none;">
+        <h2>Register</h2>
+        <input type="email" id="registerEmail" placeholder="Email" required>
+        <input type="password" id="registerPassword" placeholder="Password" required>
+        <input type="password" id="registerConfirmPassword" placeholder="Confirm Password" required>
+        <div id="passwordStrength"></div>
+        <button onclick="register()">Register</button>
+        <div class="switch-auth">
+            Already have an account? <a onclick="showLogin()">Login</a>
+        </div>
+    </div>
+
+    <!-- Dashboard (initially hidden) -->
+    <div class="dashboard-container" id="dashboard">
+        <button class="logout-btn" onclick="logout()">Logout</button>
         <h1>Fraud Detection Dashboard</h1>
 
         <!-- Flagged Transactions Table -->
@@ -82,77 +67,271 @@
     </div>
 
     <script>
-        // Fetch flagged transactions
-        fetch('http://localhost:5000/api/transactions')
-            .then(response => response.json())
-            .then(data => {
-                const table = document.getElementById('transactions').getElementsByTagName('tbody')[0];
-                data.forEach(row => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${row.Transaction_ID}</td>
-                        <td>${row.Time}</td>
-                        <td>${row.Amount}</td>
-                        <td>${row.Prediction}</td>
-                        <td>${row.Actual_Class}</td>
-                    `;
-                    table.appendChild(tr);
-                });
-            });
+        // Show flash message
+        function showFlashMessage(message, isSuccess = true) {
+            const flash = document.getElementById('flashMessage');
+            flash.textContent = message;
+            flash.style.backgroundColor = isSuccess ? '#4CAF50' : '#f44336';
+            flash.style.display = 'block';
 
-        // Fetch daily fraud counts and render chart
-        fetch('http://localhost:5000/api/stats/daily')
+            flash.style.animation = 'fadeIn 0.3s ease-out';
+
+            setTimeout(() => {
+                // Fade out animation
+                flash.style.animation = 'fadeOut 0.5s ease-out';
+                setTimeout(() => {
+                    flash.style.display = 'none';
+                    flash.style.animation = '';
+                }, 500);
+            }, 3000);
+        }
+        // Password strength indicator
+        document.getElementById('registerPassword')?.addEventListener('input', function() {
+            const strengthText = document.getElementById('passwordStrength');
+            const password = this.value;
+            
+            if (!password) {
+                strengthText.textContent = '';
+                return;
+            }
+            
+            const strength = checkPasswordStrength(password);
+            strengthText.textContent = `Password strength: ${strength.score}/4 (${strength.message})`;
+            strengthText.style.color = strength.color;
+        });
+
+        function checkPasswordStrength(password) {
+            const minLength = 8;
+            const hasUpperCase = /[A-Z]/.test(password);
+            const hasLowerCase = /[a-z]/.test(password);
+            const hasNumbers = /\d/.test(password);
+            const hasSpecialChars = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+            
+            let score = 0;
+            if (password.length >= minLength) score++;
+            if (hasUpperCase) score++;
+            if (hasLowerCase) score++;
+            if (hasNumbers) score++;
+            if (hasSpecialChars) score++;
+            
+            let message = '';
+            let color = 'red';
+            
+            if (score <= 2) message = 'Weak';
+            else if (score === 3) {
+                message = 'Moderate';
+                color = 'orange';
+            }
+            else if (score === 4) {
+                message = 'Strong';
+                color = 'green';
+            }
+            else {
+                message = 'Very Strong';
+                color = 'darkgreen';
+            }
+            
+            return { score, message, color };
+        }
+
+        // Toggle between login and register forms
+        function showRegister() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+        }
+
+        function showLogin() {
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+        }
+
+        // Login function
+        function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!email || !password) {
+                showFlashMessage('Email and password are required', false);
+                return;
+            }
+            
+            fetch('http://localhost:5000/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password }),
+            })
             .then(response => response.json())
             .then(data => {
-                console.log("API Response:", data); // Debugging line
-                if (!Array.isArray(data)) {
-                    console.error("Expected an array but got:", data);
-                    return; // Stop execution if data is not an array
+                if (data.success) {
+                    localStorage.setItem('loggedIn', 'true');
+                    showFlashMessage('Login successful!');
+                    // Hide login, show dashboard
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    
+                    // Load dashboard data
+                    loadDashboardData();
+                } else {
+                    showFlashMessage(data.message || 'Invalid credentials', false);
                 }
-                const labels = data.map(entry => entry.time);
-                const fraudCounts = data.map(entry => entry.fraud_count);
+            })
+            .catch(error => {
+                showFlashMessage('Login failed. Please try again.', false);
+                console.error('Error:', error);
+            });
+        }
 
-                const ctx = document.getElementById('fraudChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Daily Fraud Count',
-                            data: fraudCounts,
-                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                            borderColor: 'rgba(255, 99, 132, 1)',
-                            borderWidth: 2,
-                            fill: true
-                        }]
+        // Register function
+        function register() {
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('registerConfirmPassword').value;
+            
+            if (!email || !password || !confirmPassword) {
+                showFlashMessage('All fields are required', false);
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showFlashMessage('Passwords do not match', false);
+                return;
+            }
+            
+            fetch('http://localhost:5000/api/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password, confirmPassword }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showFlashMessage('Registration successful! Please login.');
+                    showLogin();
+                    // Clear registration form
+                    document.getElementById('registerEmail').value = '';
+                    document.getElementById('registerPassword').value = '';
+                    document.getElementById('registerConfirmPassword').value = '';
+                    document.getElementById('passwordStrength').textContent = '';
+                } else {
+                    showFlashMessage(data.message || 'Registration failed', false);
+                }
+            })
+            .catch(error => {
+                showFlashMessage('Registration failed. Please try again.', false);
+                console.error('Error:', error);
+            });
+        }
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('loggedIn');
+            // Show login, hide dashboard
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('dashboard').style.display = 'none';
+            
+            // Clear form
+            document.getElementById('loginEmail').value = '';
+            document.getElementById('loginPassword').value = '';
+            
+            showFlashMessage('Logged out successfully');
+        }
+
+        // Load dashboard data
+        function loadDashboardData() {
+            // Fetch flagged transactions
+            fetch('http://localhost:5000/api/transactions')
+                .then(response => response.json())
+                .then(data => {
+                    const table = document.getElementById('transactions').getElementsByTagName('tbody')[0];
+                    table.innerHTML = ''; // Clear existing rows
+                    data.forEach(row => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${row.Transaction_ID}</td>
+                            <td>${row.Time}</td>
+                            <td>${row.Amount}</td>
+                            <td>${row.Prediction}</td>
+                            <td>${row.Actual_Class}</td>
+                        `;
+                        table.appendChild(tr);
+                    });
+                });
+
+            // Fetch daily fraud counts and render chart
+        fetch('http://localhost:5000/api/stats/daily')
+        .then(response => response.json())
+        .then(data => {
+            console.log("API Response:", data);
+
+            if (!Array.isArray(data) || data.length === 0) {
+                console.warn("No data to plot chart.");
+                return;
+            }
+
+            const labels = data.map(entry => entry.time);
+            const fraudCounts = data.map(entry => entry.fraud_count);
+
+            const ctx = document.getElementById('fraudChart').getContext('2d');
+
+            // Destroy existing chart if exists
+            if (window.fraudChart && typeof window.fraudChart.destroy === 'function') {
+                window.fraudChart.destroy();
+            }
+
+            window.fraudChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Daily Fraud Count',
+                        data: fraudCounts,
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: '#03dac6',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Daily Fraud Trends',
+                            color: '#03dac6'
+                        }
                     },
-                    options: {
-                        responsive: true,
-                        plugins: {
+                    scales: {
+                        x: {
                             title: {
                                 display: true,
-                                text: 'Daily Fraud Trends'
+                                text: 'Time Index(Date wise)',
+                                color: '#03dac6'
                             }
                         },
-                        scales: {
-                            x: {
-                                
-                                title: {
-                                    display: true,
-                                    text: 'Time'
-                                }
-                            },
-                            y: {
-                                title: {
-                                    display: true,
-                                    text: 'Fraud Count'
-                                },
-                                beginAtZero: true
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Fraud Count',
+                                color: '#03dac6'
                             }
                         }
                     }
-                });
+                }
             });
+        })
+        .catch(error => console.error("Chart Error:", error));
+                }
+        window.onload = function () {
+            if (localStorage.getItem('loggedIn') === 'true') {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                loadDashboardData();
+            }
+        };        
     </script>
 </body>
 </html>
